@@ -20,7 +20,7 @@ type LocalProcess struct {
 }
 
 type Server struct {
-	ip string
+	ip   string
 	port uint16
 }
 
