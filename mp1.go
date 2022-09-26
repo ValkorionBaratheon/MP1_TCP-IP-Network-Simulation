@@ -3,25 +3,90 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"os"
+	"strconv"
+	"time"
 )
 
-// Immutable program info specified in config file
-type LocalProcess struct {
+// This would be the structure representing a process in our program.
+type Process struct {
+	ip        string
+	port      int
 	min_delay int
 	max_delay int
-
 	// Simulated process ID of this process
 	pid int
-
 	// Maps remote process IDs to IPs and ports
-	remote_processes map[int]Server
+	remote_processes map[string]Process
 }
 
-type Server struct {
-	ip   string
-	port uint16
+func (process *Process) get_delay() (int, int) {
+	return process.min_delay, process.max_delay
+}
+
+func (process *Process) read_config() {
+	// Gets the file, this can be it's own function.
+	file, err := os.Open("./config.txt")
+	if err != nil {
+		fmt.Println("config file not found")
+		os.Exit(1)
+	}
+
+	// Gets the min and max delay, this can be it's own function.
+	fmt.Fscanln(file, &process.min_delay, &process.max_delay)
+	// fmt.Printf("%d: %d, %d\n", n, min_delay, max_delay)
+	process.remote_processes = make(map[string]Process)
+
+	// Fills up the process map, this can be it's own function.
+	for {
+		var (
+			pid  int
+			ip   string
+			port int
+		)
+		_, err := fmt.Fscanln(file, &pid, &ip, &port)
+		if err == io.EOF {
+			return
+		}
+		// If the PID is the id of the current process
+		// No need to set the remote process.
+		if pid == process.pid {
+			process.ip = ip
+			process.port = port
+		} else {
+			remote_process := Process{
+				pid:  pid,
+				ip:   ip,
+				port: port,
+			}
+			port := strconv.Itoa(port)
+			process.remote_processes[ip+":"+port] = remote_process
+		}
+	}
+}
+
+func (process *Process) unicast_send(destination string, message []byte) {
+	// duration := time.Duration(rand.Intn(max_delay) + min_delay)
+	// time.Sleep(duration)
+	dialer := &net.Dialer{
+		LocalAddr: &net.TCPAddr{
+			IP:   net.ParseIP("127.0.0.1"),
+			Port: 2, // needs to be local process port.
+		},
+	}
+	conn, _ := dialer.Dial("tcp", destination)
+	conn.Write(message)
+	conn.Close()
+}
+
+func (process *Process) unicast_recv(source net.Conn, msg []byte) {
+	source.Read(msg)
+	address := source.RemoteAddr().String()
+	pid := process.remote_processes[address].pid
+	fmt.Printf("Received %s from %d, system time is %v\n", msg, pid, time.Now())
 }
 
 func readConfig() []string {
@@ -51,79 +116,25 @@ func readConfig() []string {
 	return out
 }
 
-func parseConfig(local_pid int, lines []string) LocalProcess {
-	var min_delay int
-	var max_delay int
-	remote_processes := make(map[int]Server)
-
-	_, err := fmt.Sscan(lines[0], &min_delay, &max_delay)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for _, line := range lines[1:] {
-		var pid int
-		var ip string
-		var port uint16
-
-		_, err := fmt.Sscan(line, &pid, &ip, &port)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		server := Server{ip, port}
-		remote_processes[pid] = server
-	}
-
-	return LocalProcess{min_delay, max_delay, local_pid, remote_processes}
-}
-
 func main() {
-	lines := readConfig()
-	local_process := parseConfig(1, lines)
+	pid, _ := strconv.Atoi(os.Args[1])
+	process := Process{pid: pid}
+	process.read_config()
+	port := strconv.Itoa(process.port)
 
-	fmt.Printf("%+v\n", local_process)
-}
-
-/*
-func main() {
-	arguments := os.Args
-	if len(arguments) == 1 {
-		fmt.Println("Please provide port number")
-		return
-	}
-
-	PORT := ":" + arguments[1]
-	l, err := net.Listen("tcp", PORT)
+	ln, err := net.Listen("tcp", process.ip+":"+port)
 	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer l.Close()
-
-	c, err := l.Accept()
-	if err != nil {
-		fmt.Println(err)
-		return
+		panic(err)
 	}
 
 	for {
-		netData, err := bufio.NewReader(c).ReadString('\n')
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		if strings.TrimSpace(string(netData)) == "STOP" {
-			fmt.Println("Exiting TCP server!")
-			return
-		}
+		// fmt.Print("please input a command \n>>")
 
-		fmt.Print("-> ", string(netData))
-		t := time.Now()
-		myTime := t.Format(time.RFC3339) + "\n"
-		c.Write([]byte(myTime))
+		// TODO: Unicast send should go here
+
+		// Unicast recv
+		source, _ := ln.Accept()
+		msg := make([]byte, 2048)
+		go process.unicast_recv(source, msg)
 	}
 }
-*/
