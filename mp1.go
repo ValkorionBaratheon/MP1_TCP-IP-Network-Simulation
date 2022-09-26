@@ -18,41 +18,24 @@ type Process struct {
 	// Simulated process ID of this process
 	pid int
 	// Maps remote process IDs to IPs and ports
-	remote_processes map[string]Process
+	remote_processes map[int]Process
 }
 
 func (process *Process) get_delay() (int, int) {
 	return process.min_delay, process.max_delay
 }
 
-func get_config_file() {
-	// TODO?
-
-}
-
-func (process *Process) read_min_max_delay() {
-	// TODO?
-
-}
-
-func (process *Process) read_remote_processes() {
-	// TODO ?
-
-}
-
-func (process *Process) read_config() {
-	// This can be get_config_file
+func get_config_file() (file *os.File) {
 	file, err := os.Open("./config.txt")
 	if err != nil {
-		fmt.Println("config file not found")
+		fmt.Println("config.txt file not found")
 		os.Exit(1)
 	}
-	// This can be get min_max_delay
-	fmt.Fscanln(file, &process.min_delay, &process.max_delay)
+	return file
+}
 
-	// This can be read_remote_processes
-	// Fills up the process map, this can be it's own function.
-	process.remote_processes = make(map[string]Process)
+func (process *Process) read_remote_processes(file *os.File) {
+	process.remote_processes = make(map[int]Process)
 	for {
 		var (
 			pid  int
@@ -75,25 +58,48 @@ func (process *Process) read_config() {
 				ip:   ip,
 				port: port,
 			}
-			port := strconv.Itoa(port)
-			process.remote_processes[ip+":"+port] = remote_process
+			process.remote_processes[pid] = remote_process
 		}
 	}
 }
 
+func (process *Process) read_config() {
+	file := get_config_file()
+	fmt.Fscanln(file, &process.min_delay, &process.max_delay)
+	process.read_remote_processes(file)
+}
+
+func (process *Process) get_dailer() (dialer *net.Dialer) {
+	fmt.Println("dailer", process.ip, process.port)
+	dialer = &net.Dialer{
+		LocalAddr: &net.TCPAddr{
+			IP:   net.ParseIP(process.ip),
+			Port: process.port,
+		},
+	}
+	return dialer
+}
+
 func (process *Process) unicast_send(destination string, message []byte) {
-	// TODO:
+	conn, err := net.Dial("tcp", destination)
+	if err != nil {
+		panic(err)
+	}
+	conn.Write([]byte(string(rune(process.pid))))
+	conn.Write(message)
+	conn.Close()
 }
 
 func (process *Process) unicast_recv(source net.Conn, msg []byte) {
 	source.Read(msg)
-	address := source.RemoteAddr().String()
-	pid := process.remote_processes[address].pid
-	fmt.Printf("Received %s from %d, system time is %v\n", msg, pid, time.Now())
+	pid := msg[:1]
+	message := msg[1:]
+	fmt.Printf("Received %s from %d, system time is %v\n", message, pid, time.Now())
 }
 
 func main() {
 	pid, _ := strconv.Atoi(os.Args[1])
+
 	// Entry point, a new process is created and it reads
 	// the config file to learn about other processes.
 	process := Process{pid: pid}
@@ -104,6 +110,7 @@ func main() {
 	port := strconv.Itoa(process.port)
 
 	ln, err := net.Listen("tcp", process.ip+":"+port)
+	_ = ln
 
 	if err != nil {
 		panic(err)
@@ -111,12 +118,15 @@ func main() {
 
 	// From there the program loops indefinitely
 	// Sending and receiving messages (to/from) to other processes.
-	for {
+	// process.unicast_send("127.0.0.1:9024", []byte("hello"))
+
+	// process.unicast_send("127.0.0.1:8001", []byte("hello"))
+	/*for {
 		// TODO: Unicast send should go here
 
 		// Unicast recv
-		source, _ := ln.Accept()
-		msg := make([]byte, 2048)
-		go process.unicast_recv(source, msg)
-	}
+		//source, _ := ln.Accept()
+		// msg := make([]byte, 2048)
+		// go process.unicast_recv(source, msg)
+	} */
 }
