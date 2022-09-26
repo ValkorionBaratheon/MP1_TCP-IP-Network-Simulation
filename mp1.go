@@ -96,19 +96,14 @@ func receive_incoming(ln net.Listener) error {
 
 	defer conn.Close()
 
-	// Read the length of the message first
-	var size int32
-	err = binary.Read(conn, binary.BigEndian, &size)
+	// Read the length of the message and sender's PID
+	header := make([]int32, 2)
+	err = binary.Read(conn, binary.BigEndian, header)
 	if err != nil {
 		return err
 	}
 
-	// Read the sending process's PID
-	var remote_pid int32
-	err = binary.Read(conn, binary.BigEndian, &remote_pid)
-	if err != nil {
-		return err
-	}
+	size, remote_pid := header[0], header[1]
 
 	// Read the actual message
 	raw_data := make([]byte, size)
@@ -155,13 +150,10 @@ func send_message(sender LocalProcess, dest_pid int, message string) error {
 
 	defer conn.Close()
 
-	// Send the message length first, then the PID, then the message
-	err = binary.Write(conn, binary.BigEndian, int32(len(message)))
-	if err != nil {
-		return err
-	}
+	header := []int32{int32(len(message)), int32(sender.pid)}
 
-	err = binary.Write(conn, binary.BigEndian, int32(sender.pid))
+	// Send the message length first, then the PID, then the message
+	err = binary.Write(conn, binary.BigEndian, header)
 	if err != nil {
 		return err
 	}
