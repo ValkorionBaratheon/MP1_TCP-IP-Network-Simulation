@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"strconv"
@@ -27,20 +25,34 @@ func (process *Process) get_delay() (int, int) {
 	return process.min_delay, process.max_delay
 }
 
+func get_config_file() {
+	// TODO?
+
+}
+
+func (process *Process) read_min_max_delay() {
+	// TODO?
+
+}
+
+func (process *Process) read_remote_processes() {
+	// TODO ?
+
+}
+
 func (process *Process) read_config() {
-	// Gets the file, this can be it's own function.
+	// This can be get_config_file
 	file, err := os.Open("./config.txt")
 	if err != nil {
 		fmt.Println("config file not found")
 		os.Exit(1)
 	}
-
-	// Gets the min and max delay, this can be it's own function.
+	// This can be get min_max_delay
 	fmt.Fscanln(file, &process.min_delay, &process.max_delay)
-	// fmt.Printf("%d: %d, %d\n", n, min_delay, max_delay)
-	process.remote_processes = make(map[string]Process)
 
+	// This can be read_remote_processes
 	// Fills up the process map, this can be it's own function.
+	process.remote_processes = make(map[string]Process)
 	for {
 		var (
 			pid  int
@@ -52,11 +64,12 @@ func (process *Process) read_config() {
 			return
 		}
 		// If the PID is the id of the current process
-		// No need to set the remote process.
+		// No need to put an entry into the map.
 		if pid == process.pid {
 			process.ip = ip
 			process.port = port
 		} else {
+			// Otherwise creates a new process struct and puts it in the map.
 			remote_process := Process{
 				pid:  pid,
 				ip:   ip,
@@ -69,17 +82,7 @@ func (process *Process) read_config() {
 }
 
 func (process *Process) unicast_send(destination string, message []byte) {
-	// duration := time.Duration(rand.Intn(max_delay) + min_delay)
-	// time.Sleep(duration)
-	dialer := &net.Dialer{
-		LocalAddr: &net.TCPAddr{
-			IP:   net.ParseIP("127.0.0.1"),
-			Port: 2, // needs to be local process port.
-		},
-	}
-	conn, _ := dialer.Dial("tcp", destination)
-	conn.Write(message)
-	conn.Close()
+	// TODO:
 }
 
 func (process *Process) unicast_recv(source net.Conn, msg []byte) {
@@ -89,47 +92,26 @@ func (process *Process) unicast_recv(source net.Conn, msg []byte) {
 	fmt.Printf("Received %s from %d, system time is %v\n", msg, pid, time.Now())
 }
 
-func readConfig() []string {
-	file, err := os.Open("./config.txt")
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	out := make([]string, 0)
-
-	// Release file handle when this function returns
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		out = append(out, scanner.Text())
-	}
-
-	err = scanner.Err()
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return out
-}
-
 func main() {
 	pid, _ := strconv.Atoi(os.Args[1])
+	// Entry point, a new process is created and it reads
+	// the config file to learn about other processes.
 	process := Process{pid: pid}
 	process.read_config()
+
+	// After creating a map of the other process it sets up the
+	// tcp client.
 	port := strconv.Itoa(process.port)
 
 	ln, err := net.Listen("tcp", process.ip+":"+port)
+
 	if err != nil {
 		panic(err)
 	}
 
+	// From there the program loops indefinitely
+	// Sending and receiving messages (to/from) to other processes.
 	for {
-		// fmt.Print("please input a command \n>>")
-
 		// TODO: Unicast send should go here
 
 		// Unicast recv
