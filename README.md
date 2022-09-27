@@ -2,6 +2,16 @@
  This is Machine Problem 1, which simulates delays in a TCP/IP server-client relationship.
  
 ## Program Design
+### File Structure of Machine Problem 1
+This program consists of two files: 
+- ``config.txt``
+- ``mp1.go`` (later built into an executable called ``mp1.exe``)
+  
+### Overview of config.txt
+This file contains the minimum and maximum delays (in milliseconds), as well as two processes (at the time of writing), each consisting of a process ID (PID), IP address, and port number.
+  
+### Overview of mp1.go
+Test
   
 ## Code Flow
   
@@ -9,7 +19,7 @@
 1. Open a terminal. 
 2. In the terminal, navigate to the project folder. 
 3. Input the following command to build the executable: ``go build mp1.go``.
-4. Input the following command: ``./mp1 [PID]``. PID (process ID) should be a single integer corresponding to the desired process you wish to start (1 or 2).
+4. Input the following command: ``./mp1 [PID]``. PID should be a single integer corresponding to the desired process you wish to start (1 or 2).
 5. Open a second terminal and navigate to the project folder.
 6. Repeat step 4.
 7. In each terminal, input the following command: ``send [PID] [message]``. The message can be any string.  
