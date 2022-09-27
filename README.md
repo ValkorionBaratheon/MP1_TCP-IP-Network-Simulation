@@ -31,6 +31,7 @@ Please see the earlier section under ``Overview of mp1.go``. You will see ``type
 ### Reading config.txt
 ``get_delay()``, ``get_config_file()``, ``read_remote_processes()``, and ``read_config()`` all deal with reading ``config.txt`` and extracting the relevant information, mapping the remote processes.
 ### Sending Messages
+Three functions, ``get_command()``, ``recv_commands()``, and ``unicast_send()`` work together to send messages to another process. The first parses the commands from the command-line, returning the ``destination`` and ``message`` parameters of the ``send`` command. Then, the second function receives those parameters, and calls upon the third function to finally perform the command. In other words, ``unicast_send()`` dials the destination process and sends the user-generated message. This function is called by ``recv_commands()``, which is a goroutine that continuously awaits user-input.
 ### Receiving Messages
   
 ## How To Run
