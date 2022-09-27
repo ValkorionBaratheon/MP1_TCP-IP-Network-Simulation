@@ -8,3 +8,4 @@
 5. Open a second terminal and navigate to the project folder.
 6. Repeat step 4.
 7. In each terminal, input the following command: ``send [PID] [message]``. The message can be any string.
+The processes will display send and receive messages with time stamps in their respective terminals.
