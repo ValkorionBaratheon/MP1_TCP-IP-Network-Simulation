@@ -1,11 +1,19 @@
+/*
+When you type `send (pid) (message)` to send a message to a remote process,
+the length of the message is computed and sent as a signed 32-bit int in Big Endian
+format. This is followed by the calling process's PID, also as a signed 32 bit
+Big Endian int, and finally by the message which is a plain ASCII string.
+There is no termination character because the message length was sent first,
+so the receiver knows how many ASCII characters to expect after it receives the PID.
+The message can contain spaces and can be any length.
+*/
 package main
 
 import (
 	"bufio"
 	"encoding/binary"
-	"errors"
 	"fmt"
-	"io"
+	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -14,199 +22,273 @@ import (
 	"time"
 )
 
-// Process struct
-// This represents a process that can unicast_send
-// and unicast_receive to and from other processes.
-type Process struct {
-	ip        string
-	port      int
+// Program state
+type LocalProcess struct {
 	min_delay int
 	max_delay int
-	// process ID of this process
-	pid int32
+
+	// Simulated process ID of this process
+	pid int
+
 	// Maps remote process IDs to IPs and ports
-	remote_processes map[int32]Process
+	remote_processes map[int]Server
+
+	// Messages to be sent
+	message_queue chan Message
+
+	// Random number generator
+	r *rand.Rand
 }
 
-// Returns the delay for the current process.
-func (process *Process) get_delay() (int, int) {
-	return process.min_delay, process.max_delay
+// Remote server info
+type Server struct {
+	ip string
+	port uint16
 }
 
-// Gets the file handle for the config file.
-func get_config_file() (file *os.File) {
-	file, err := os.Open("./config.txt")
+// Message to be sent with simulated delay
+type Message struct {
+	start_time time.Time
+	delay int
+	sender_pid int
+	dest Server
+	content string
+}
+
+func check(err error) {
 	if err != nil {
-		fmt.Println("config.txt file not found")
-		os.Exit(1)
+		log.Fatal(err)
 	}
-	return file
 }
 
-// Populates a map of processes that the current
-// process can unicast_send and unicast_receive from.
-func (process *Process) read_remote_processes(file *os.File) {
-	process.remote_processes = make(map[int32]Process)
+// Random delay is selected from a uniform distribution between min_delay and max_delay
+func rand_delay(local_process *LocalProcess) int {
+	return local_process.r.Intn(local_process.max_delay - local_process.min_delay) + local_process.min_delay 
+}
+
+// Get the lines of the config file
+func read_config() []string {
+	file, err := os.Open("./config.txt")
+	check(err)
+
+	out := make([]string, 0)
+
+	// Release file handle when this function returns
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		out = append(out, scanner.Text())
+	}
+
+	err = scanner.Err()
+	check(err)
+
+	return out
+}
+
+// Parse lines of the config and construct initial program state
+func parse_config(local_pid int, lines []string) LocalProcess {
+	var min_delay int
+	var max_delay int
+	remote_processes := make(map[int]Server)
+
+	_, err := fmt.Sscan(lines[0], &min_delay, &max_delay)
+	check(err)
+
+	for _, line := range lines[1:] {
+		var pid int
+		var ip string
+		var port uint16
+
+		_, err := fmt.Sscan(line, &pid, &ip, &port)
+		check(err)
+
+		server := Server{ip, port}
+		remote_processes[pid] = server
+	}
+
+	// Circular buffer with size 256
+	mq := make(chan Message, 256)
+	seed := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(seed)
+
+	return LocalProcess{min_delay, max_delay, local_pid, remote_processes, mq, r}
+}
+
+func receive_incoming(ln net.Listener) error {
+	conn, err := ln.Accept()
+	if err != nil {
+		return err
+	}
+
+	defer conn.Close()
+
+	// Read the length of the message and sender's PID
+	header := make([]int32, 2)
+	err = binary.Read(conn, binary.BigEndian, header)
+	if err != nil {
+		return err
+	}
+
+	size, remote_pid := header[0], header[1]
+
+	// Read the actual message
+	raw_data := make([]byte, size)
+	_, err = conn.Read(raw_data)
+	if err != nil {
+		return err
+	}
+
+	message := string(raw_data)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Received '%s' from process %d at %s\n", message, remote_pid, time.Now())
+	return nil
+}
+
+func listen_for_incoming(port uint16) {
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 	for {
-		var (
-			pid  int32
-			ip   string
-			port int
-		)
-		_, err := fmt.Fscanln(file, &pid, &ip, &port)
-		if err == io.EOF {
+		err = receive_incoming(ln)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+}
+
+func send_message(message *Message) error {
+	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", message.dest.ip, message.dest.port))
+	if err != nil {
+		return err
+	}
+
+	defer conn.Close()
+
+	header := []int32{int32(len(message.content)), int32(message.sender_pid)}
+
+	// Send the message length first, then the PID, then the message
+	err = binary.Write(conn, binary.BigEndian, header)
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintf(conn, message.content)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func queue_message(sender *LocalProcess, dest_pid int, message string) {
+	server, ok := sender.remote_processes[dest_pid]
+
+	if !ok {
+		fmt.Printf("Tried to queue message to process %d which does not have entry in config file\n", dest_pid)
+		return
+	}
+
+	now := time.Now()
+	delay := 0
+
+	// Delay should be zero for loopback messages
+	if sender.pid != dest_pid {
+		delay = rand_delay(sender)
+	}
+
+	msg_struct := Message{now, delay, sender.pid, server, message}
+	sender.message_queue <- msg_struct
+
+	fmt.Printf("Queuing '%s' to be sent to process %d. Current time is %s\n", message, dest_pid, now)
+}
+
+func process_message_queue(local_process *LocalProcess) {
+	for {
+		// Read a message from the channel
+		msg, ok := <- local_process.message_queue
+
+		if !ok {
 			return
 		}
-		// If the PID is the id of the current process
-		// No need to put an entry into the map.
-		if pid == process.pid {
-			process.ip = ip
-			process.port = port
-		} else {
-			// Otherwise creates a new process struct and puts it in the map.
-			remote_process := Process{
-				pid:  pid,
-				ip:   ip,
-				port: port,
+
+		now := time.Now().UnixMilli()
+
+		// Check if the message is ready to be sent
+		if (now - msg.start_time.UnixMilli() > int64(msg.delay)) {
+			// Send it
+			err := send_message(&msg)
+
+			if err != nil {
+				log.Println(err)
 			}
-			process.remote_processes[pid] = remote_process
+		} else {
+			// If it isn't ready to be sent, queue it again
+			local_process.message_queue <- msg
 		}
-	}
-}
-
-// Reads the configuration file provided.
-func (process *Process) read_config() {
-	file := get_config_file()
-	fmt.Fscanln(file, &process.min_delay, &process.max_delay)
-	process.read_remote_processes(file)
-}
-
-func (process *Process) unicast_send(destination string, message []byte) {
-	id, err := strconv.ParseInt(destination, 10, 32)
-	if err != nil {
-		fmt.Println("error: Process ID must be integer.")
-		return
-	}
-	pid := int32(id)
-	// Gets the process ID and port of
-	// the receving process.
-	ip := process.remote_processes[pid].ip
-	port := strconv.Itoa(process.remote_processes[pid].port)
-	conn, err := net.Dial("tcp", ip+":"+port)
-	// Checks for connection issues with receiving process.
-	if err != nil {
-		fmt.Println("error: Process ID might not exist in the config.txt file.")
-		return
-	}
-
-	// Stimulates the delay of sending a message.
-	min_delay, max_delay := process.get_delay()
-	duration := time.Duration(rand.Intn(max_delay) + min_delay)
-	time.Sleep(duration)
-
-	// Writes the process ID into the TCP channel.
-	binary.Write(conn, binary.BigEndian, process.pid)
-	// Writes the message into the TCP channel.
-	conn.Write(message)
-	conn.Close()
-	fmt.Printf("Sent " + string(message) + " to process %d, system time is %v\n", pid, time.Now())
-}
-
-func (process *Process) unicast_recv(source net.Conn, msg []byte) {
-	var pid int32
-	binary.Read(source, binary.BigEndian, &pid)
-	source.Read(msg)
-	fmt.Printf("Received " + from_c_str(msg) + " from process %d, system time is %v\n>> ", pid, time.Now())
-}
-
-func (process *Process) get_command() (string, string, error) {
-	// Reads the command from Stdin
-	command, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	// Trims the new line obtained when the user hits Enter.
-	command = strings.TrimSuffix(command, "\r\n")
-	// If the command is 'q' exits the program.
-	if command == "q" {
-		fmt.Println("Closing TCP server...")
-		os.Exit(0)
-	}
-	// Checks that the command is valid command.
-	commandArray := strings.Split(string(command), " ")
-	if len(commandArray) < 3 {
-		return "", "", errors.New(`error: Invalid command, must be of the form send [Integer] [String]`)
-	}
-	message := strings.Join(commandArray[2:], " ")
-	destination := commandArray[1]
-	return message, destination, nil
-}
-
-func (process *Process) recv_commands() {
-	// Receives commands from the user.
-	// User can press 'q' to quit the program.
-	for {
-		fmt.Printf("Please input a command or 'q' to quit \n>> ")
-		message, destination, err := process.get_command()
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-		// Once the command is received, sends the appropriate unicast to
-		// the receiving process.
-		process.unicast_send(destination, []byte(message))
-	}
-}
-
-func from_c_str(bytes []byte) string {
-	null := 0
-	for i, b := range bytes {
-		if b == 0 {
-			null = i
-			break
-		}
-	}
-
-	return string(bytes[0:null])
-}
-
-func (process *Process) recv_messages() {
-	// Obtains the process port.
-	port := strconv.Itoa(process.port)
-	ln, _ := net.Listen("tcp", process.ip+":"+port)
-	for {
-		source, _ := ln.Accept()
-		msg := make([]byte, 4096)
-		// Receives an incoming message.
-		go process.unicast_recv(source, msg)
 	}
 }
 
 func main() {
-	// Parses the process id received from the user in the command line.
-	id, err := strconv.ParseInt(os.Args[1], 10, 32)
-	if err != nil {
-		fmt.Println("error: Must provide a valid integer for process ID.")
-		os.Exit(1)
+	args := os.Args
+
+	if len(args) <= 1 {
+		log.Fatal("Provide PID as first argument")
 	}
-	pid := int32(id)
 
-	// A process struct, that represents the current process.
-	// Contains information about the ip and port as well
-	// min and max delay, as a map to other processes.
-	process := Process{pid: pid}
+	pid, err := strconv.Atoi(args[1])
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// Reads the config.txt file to create a map
-	// from process id's to their respective ip and port.
-	process.read_config()
+	lines := read_config()
+	local_process := parse_config(pid, lines)
+	defer close(local_process.message_queue)
+	local_entry, ok := local_process.remote_processes[pid];
+	if !ok {
+		log.Fatal(fmt.Sprintf("PID %d was supplied but does not exist in config\n", pid))
+	}
 
-	// A go routine to receive user commands
-	// and perform a unicast send to the appropriate process.
-	go process.recv_commands()
+	go listen_for_incoming(local_entry.port)
+	go process_message_queue(&local_process)
 
-	// A go routine to listen for message and continously
-	// deliver the message to the application.
-	go process.recv_messages()
+	fmt.Printf("Process %d. Type 'send <pid> <message>' or 'q' to quit.`\n", pid)
 
-	// An infinite loop to prevent the program from terminating
-	// except instructing the process to terminate.
-	for {
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for scanner.Scan() {
+		tokens := strings.Split(scanner.Text(), " ")
+
+		if tokens[0] == "q" {
+			return
+		}
+
+		if tokens[0] != "send" {
+			fmt.Printf("Type 'send <pid> <message>' to send a message\n")
+			continue
+		}
+
+		dest_pid, err := strconv.Atoi(tokens[1])
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		message := strings.Join(tokens[2:], " ")
+
+		// The size of the channel buffer is large but if it should fill up,
+		// running this as a goroutine will prevent the main thread from blocking
+		go queue_message(&local_process, dest_pid, message)
+		if err != nil {
+			log.Println(err)
+		}
 	}
 }
