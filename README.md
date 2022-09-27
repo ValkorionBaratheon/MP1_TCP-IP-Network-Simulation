@@ -3,7 +3,7 @@ This is Machine Problem 1, which simulates delays in a TCP/IP server-client rela
    
 This program documentation consists of the following sections:
 1. Program Design
-2. Code Flow
+2. Code Flow of mp1.go
 3. How to Run
   
 ## Program Design
@@ -26,6 +26,12 @@ Utilizing goroutines, the program handles sending messages by implementing ``uni
 Utilizing goroutines, the program handles receiving messages by implementing ``unicast_receive`` functionality. Each process will constantly be waiting for another process to dial it. When that happens, it will send a system message outputting the message received with a time stamp.
   
 ## Code Flow
+### Process Type
+Please see the earlier section under ``Overview of mp1.go``. You will see ``type Process struct`` in the code.
+### Reading config.txt
+``get_delay()``, ``get_config_file()``, ``read_remote_processes()``, and ``read_config()`` all deal with reading ``config.txt`` and extracting the relevant information, mapping the remote processes.
+### Sending Messages
+### Receiving Messages
   
 ## How To Run
 1. Open a terminal. 
