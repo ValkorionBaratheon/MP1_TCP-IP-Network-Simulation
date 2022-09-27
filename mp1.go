@@ -23,7 +23,7 @@ import (
 )
 
 // Program state
-type LocalProcess struct {
+type Process struct {
 	min_delay int
 	max_delay int
 
@@ -62,7 +62,7 @@ func check(err error) {
 }
 
 // Random delay is selected from a uniform distribution between min_delay and max_delay
-func rand_delay(local_process *LocalProcess) int {
+func rand_delay(local_process *Process) int {
 	return local_process.r.Intn(local_process.max_delay - local_process.min_delay) + local_process.min_delay 
 }
 
@@ -89,7 +89,7 @@ func read_config() []string {
 }
 
 // Parse lines of the config and construct initial program state
-func parse_config(local_pid int, lines []string) LocalProcess {
+func parse_config(local_pid int, lines []string) Process {
 	var min_delay int
 	var max_delay int
 	remote_processes := make(map[int]Server)
@@ -114,7 +114,7 @@ func parse_config(local_pid int, lines []string) LocalProcess {
 	seed := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(seed)
 
-	return LocalProcess{min_delay, max_delay, local_pid, remote_processes, mq, r}
+	return Process{min_delay, max_delay, local_pid, remote_processes, mq, r}
 }
 
 func receive_incoming(ln net.Listener) error {
@@ -189,7 +189,7 @@ func send_message(message *Message) error {
 	return nil
 }
 
-func queue_message(sender *LocalProcess, dest_pid int, message string) {
+func queue_message(sender *Process, dest_pid int, message string) {
 	server, ok := sender.remote_processes[dest_pid]
 
 	if !ok {
@@ -211,7 +211,7 @@ func queue_message(sender *LocalProcess, dest_pid int, message string) {
 	fmt.Printf("Queuing '%s' to be sent to process %d. Current time is %s\n", message, dest_pid, now)
 }
 
-func process_message_queue(local_process *LocalProcess) {
+func process_message_queue(local_process *Process) {
 	for {
 		// Read a message from the channel
 		msg, ok := <- local_process.message_queue
