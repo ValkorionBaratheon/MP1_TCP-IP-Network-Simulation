@@ -277,6 +277,8 @@ func main() {
 
 		message := strings.Join(tokens[2:], " ")
 
+		// The size of the channel buffer is large but if it should fill up,
+		// running this as a goroutine will prevent the main thread from blocking
 		go queue_message(&local_process, dest_pid, message)
 		if err != nil {
 			log.Println(err)
