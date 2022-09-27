@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-// Immutable program info specified in config file
+// Program state
 type LocalProcess struct {
 	min_delay int
 	max_delay int
@@ -40,11 +40,13 @@ type LocalProcess struct {
 	r *rand.Rand
 }
 
+// Remote server info
 type Server struct {
 	ip string
 	port uint16
 }
 
+// Message to be sent with simulated delay
 type Message struct {
 	start_time time.Time
 	delay int
@@ -59,10 +61,12 @@ func check(err error) {
 	}
 }
 
-func rand_delay(local_process LocalProcess) int {
+// Random delay is selected from a uniform distribution between min_delay and max_delay
+func rand_delay(local_process *LocalProcess) int {
 	return local_process.r.Intn(local_process.max_delay - local_process.min_delay) + local_process.min_delay 
 }
 
+// Get the lines of the config file
 func read_config() []string {
 	file, err := os.Open("./config.txt")
 	check(err)
@@ -84,6 +88,7 @@ func read_config() []string {
 	return out
 }
 
+// Parse lines of the config and construct initial program state
 func parse_config(local_pid int, lines []string) LocalProcess {
 	var min_delay int
 	var max_delay int
@@ -160,7 +165,7 @@ func listen_for_incoming(port uint16) {
 	}
 }
 
-func send_message(message Message) error {
+func send_message(message *Message) error {
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", message.dest.ip, message.dest.port))
 	if err != nil {
 		return err
@@ -184,7 +189,7 @@ func send_message(message Message) error {
 	return nil
 }
 
-func queue_message(sender LocalProcess, dest_pid int, message string) {
+func queue_message(sender *LocalProcess, dest_pid int, message string) {
 	server, ok := sender.remote_processes[dest_pid]
 
 	if !ok {
@@ -199,7 +204,7 @@ func queue_message(sender LocalProcess, dest_pid int, message string) {
 	log.Printf("Queuing '%s' to be sent to process %d. Current time is %s\n", message, dest_pid, now)
 }
 
-func process_message_queue(local_process LocalProcess) {
+func process_message_queue(local_process *LocalProcess) {
 	for {
 		// Read a message from the channel
 		msg, ok := <- local_process.message_queue
@@ -213,7 +218,7 @@ func process_message_queue(local_process LocalProcess) {
 		// Check if the message is ready to be sent
 		if (now - msg.start_time.UnixMilli() > int64(msg.delay)) {
 			// Send it
-			err := send_message(msg)
+			err := send_message(&msg)
 
 			if err != nil {
 				log.Println(err)
@@ -246,7 +251,7 @@ func main() {
 	}
 
 	go listen_for_incoming(local_entry.port)
-	go process_message_queue(local_process)
+	go process_message_queue(&local_process)
 
 	log.Printf("Process %d\n", pid)
 
@@ -272,7 +277,9 @@ func main() {
 
 		message := strings.Join(tokens[2:], " ")
 
-		go queue_message(local_process, dest_pid, message)
+		// The size of the channel buffer is large but if it should fill up,
+		// running this as a goroutine will prevent the main thread from blocking
+		go queue_message(&local_process, dest_pid, message)
 		if err != nil {
 			log.Println(err)
 		}
