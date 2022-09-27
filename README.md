@@ -1,8 +1,13 @@
 # Machine Problem 1: TCP/IP Network Simulation
- This is Machine Problem 1, which simulates delays in a TCP/IP server-client relationship.
- 
+This is Machine Problem 1, which simulates delays in a TCP/IP server-client relationship.
+   
+This program consists the following sections:
+1. Program Design
+2. Code Flow
+3. How to Run
+  
 ## Program Design
-### File Structure of Machine Problem 1
+### File Structure
 This program consists of two files: 
 - ``config.txt``
 - ``mp1.go`` (later built into an executable called ``mp1.exe``)
