@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -18,9 +20,9 @@ type Process struct {
 	min_delay int
 	max_delay int
 	// Simulated process ID of this process
-	pid int
+	pid int32
 	// Maps remote process IDs to IPs and ports
-	remote_processes map[int]Process
+	remote_processes map[int32]Process
 	exit             chan (bool)
 }
 
@@ -38,10 +40,10 @@ func get_config_file() (file *os.File) {
 }
 
 func (process *Process) read_remote_processes(file *os.File) {
-	process.remote_processes = make(map[int]Process)
+	process.remote_processes = make(map[int32]Process)
 	for {
 		var (
-			pid  int
+			pid  int32
 			ip   string
 			port int
 		)
@@ -73,24 +75,30 @@ func (process *Process) read_config() {
 }
 
 func (process *Process) unicast_send(destination string, message []byte) {
-	pid, _ := strconv.Atoi(destination)
+	id, _ := strconv.ParseInt(destination, 10, 32)
+	pid := int32(id)
 	ip := process.remote_processes[pid].ip
 	port := strconv.Itoa(process.remote_processes[pid].port)
 	conn, err := net.Dial("tcp", ip+":"+port)
 	if err != nil {
 		panic(err)
 	}
-	conn.Write([]byte(string(process.pid)))
+	// Stimulating delay.
+	min_delay, max_delay := process.get_delay()
+	duration := time.Duration(rand.Intn(max_delay) + min_delay)
+	time.Sleep(duration)
+
+	binary.Write(conn, binary.BigEndian, process.pid)
 	conn.Write(message)
 	conn.Close()
 	fmt.Printf("Sent \"%s\" to process %d, system time is %v\n", message, pid, time.Now())
 }
 
 func (process *Process) unicast_recv(source net.Conn, msg []byte) {
+	var pid int32
+	binary.Read(source, binary.BigEndian, &pid)
 	source.Read(msg)
-	pid := msg[:1]
-	message := msg[1:]
-	fmt.Printf("Received \"%s\" from %d, system time is %v\n>> ", message, pid, time.Now())
+	fmt.Printf("Received \"%s\" from %d, system time is %v\n>> ", msg, pid, time.Now())
 }
 
 func (process *Process) get_command() (string, string) {
@@ -102,9 +110,9 @@ func (process *Process) get_command() (string, string) {
 	}
 	commandArray := strings.Split(string(command), " ")
 	fmt.Println(commandArray)
-	destination := strings.Join(commandArray[2:], " ")
-	message := commandArray[1]
-	return destination, message
+	message := strings.Join(commandArray[2:], " ")
+	destination := commandArray[1]
+	return message, destination
 }
 
 func (process *Process) recv_commands() {
@@ -129,7 +137,8 @@ func (process *Process) recv_messages() {
 }
 
 func main() {
-	pid, _ := strconv.Atoi(os.Args[1])
+	id, _ := strconv.ParseInt(os.Args[1], 10, 32)
+	pid := int32(id)
 	// Entry point, a new process is created and it reads
 	// the config file to learn about other processes.
 	process := Process{pid: pid}
