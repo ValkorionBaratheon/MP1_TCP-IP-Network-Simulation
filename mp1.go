@@ -83,14 +83,14 @@ func (process *Process) unicast_send(destination string, message []byte) {
 	conn.Write([]byte(string(process.pid)))
 	conn.Write(message)
 	conn.Close()
-	fmt.Printf("Sent %s to process %d, system time is %v\n", message, pid, time.Now())
+	fmt.Printf("Sent \"%s\" to process %d, system time is %v\n", message, pid, time.Now())
 }
 
 func (process *Process) unicast_recv(source net.Conn, msg []byte) {
 	source.Read(msg)
 	pid := msg[:1]
 	message := msg[1:]
-	fmt.Printf("Received %s from %d, system time is %v\n>> ", message, pid, time.Now())
+	fmt.Printf("Received \"%s\" from %d, system time is %v\n>> ", message, pid, time.Now())
 }
 
 func (process *Process) get_command() (string, string) {
@@ -101,7 +101,8 @@ func (process *Process) get_command() (string, string) {
 		os.Exit(0)
 	}
 	commandArray := strings.Split(string(command), " ")
-	destination := commandArray[2]
+	fmt.Println(commandArray)
+	destination := strings.Join(commandArray[2:], " ")
 	message := commandArray[1]
 	return destination, message
 }
