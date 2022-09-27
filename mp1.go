@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -19,6 +21,7 @@ type Process struct {
 	pid int
 	// Maps remote process IDs to IPs and ports
 	remote_processes map[int]Process
+	exit             chan (bool)
 }
 
 func (process *Process) get_delay() (int, int) {
@@ -81,20 +84,54 @@ func (process *Process) get_dailer() (dialer *net.Dialer) {
 }
 
 func (process *Process) unicast_send(destination string, message []byte) {
-	conn, err := net.Dial("tcp", destination)
+	pid, _ := strconv.Atoi(destination)
+	ip := process.remote_processes[pid].ip
+	port := strconv.Itoa(process.remote_processes[pid].port)
+	conn, err := net.Dial("tcp", ip+":"+port)
 	if err != nil {
 		panic(err)
 	}
-	conn.Write([]byte(string(rune(process.pid))))
+	conn.Write([]byte(string(process.pid)))
 	conn.Write(message)
 	conn.Close()
+	fmt.Printf("Sent %s to process %d, system time is %v\n", message, pid, time.Now())
 }
 
 func (process *Process) unicast_recv(source net.Conn, msg []byte) {
 	source.Read(msg)
 	pid := msg[:1]
 	message := msg[1:]
-	fmt.Printf("Received %s from %d, system time is %v\n", message, pid, time.Now())
+	fmt.Printf("Received %s from %d, system time is %v\n>> ", message, pid, time.Now())
+}
+
+func (process *Process) get_command() (string, string) {
+	command, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	command = strings.TrimSuffix(command, "\n")
+	if command == "q" {
+		os.Exit(0)
+	}
+	commandArray := strings.Split(string(command), " ")
+	destination := commandArray[2]
+	message := commandArray[1]
+	return destination, message
+}
+
+func (process *Process) recv_command() {
+	for {
+		fmt.Printf("Please input a command \n>> ")
+		message, destination := process.get_command()
+		process.unicast_send(destination, []byte(message))
+	}
+}
+
+func (process *Process) recv_messages() {
+	port := strconv.Itoa(process.port)
+	ln, _ := net.Listen("tcp", process.ip+":"+port)
+	for {
+		source, _ := ln.Accept()
+		msg := make([]byte, 2048)
+		process.unicast_recv(source, msg)
+	}
 }
 
 func main() {
@@ -104,29 +141,16 @@ func main() {
 	// the config file to learn about other processes.
 	process := Process{pid: pid}
 	process.read_config()
+	go process.recv_command()
 
-	// After creating a map of the other process it sets up the
-	// tcp client.
 	port := strconv.Itoa(process.port)
-
-	ln, err := net.Listen("tcp", process.ip+":"+port)
-	_ = ln
-
-	if err != nil {
-		panic(err)
+	ln, _ := net.Listen("tcp", process.ip+":"+port)
+	for {
+		//fmt.Printf("please input a command: send [Integer] [String] \n>> ")
+		// message, destination := process_command()
+		// go process.unicast_send(destination, []byte(message))
+		source, _ := ln.Accept()
+		msg := make([]byte, 2048)
+		go process.unicast_recv(source, msg)
 	}
-
-	// From there the program loops indefinitely
-	// Sending and receiving messages (to/from) to other processes.
-	// process.unicast_send("127.0.0.1:9024", []byte("hello"))
-
-	// process.unicast_send("127.0.0.1:8001", []byte("hello"))
-	/*for {
-		// TODO: Unicast send should go here
-
-		// Unicast recv
-		//source, _ := ln.Accept()
-		// msg := make([]byte, 2048)
-		// go process.unicast_recv(source, msg)
-	} */
 }
