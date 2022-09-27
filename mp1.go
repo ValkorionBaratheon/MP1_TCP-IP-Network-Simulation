@@ -72,17 +72,6 @@ func (process *Process) read_config() {
 	process.read_remote_processes(file)
 }
 
-func (process *Process) get_dailer() (dialer *net.Dialer) {
-	fmt.Println("dailer", process.ip, process.port)
-	dialer = &net.Dialer{
-		LocalAddr: &net.TCPAddr{
-			IP:   net.ParseIP(process.ip),
-			Port: process.port,
-		},
-	}
-	return dialer
-}
-
 func (process *Process) unicast_send(destination string, message []byte) {
 	pid, _ := strconv.Atoi(destination)
 	ip := process.remote_processes[pid].ip
@@ -108,6 +97,7 @@ func (process *Process) get_command() (string, string) {
 	command, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	command = strings.TrimSuffix(command, "\n")
 	if command == "q" {
+		fmt.Println("closing TCP server...")
 		os.Exit(0)
 	}
 	commandArray := strings.Split(string(command), " ")
@@ -116,9 +106,9 @@ func (process *Process) get_command() (string, string) {
 	return destination, message
 }
 
-func (process *Process) recv_command() {
+func (process *Process) recv_commands() {
 	for {
-		fmt.Printf("Please input a command \n>> ")
+		fmt.Printf("Please input a command or 'q' to quit \n>> ")
 		message, destination := process.get_command()
 		process.unicast_send(destination, []byte(message))
 	}
@@ -128,29 +118,23 @@ func (process *Process) recv_messages() {
 	port := strconv.Itoa(process.port)
 	ln, _ := net.Listen("tcp", process.ip+":"+port)
 	for {
-		source, _ := ln.Accept()
-		msg := make([]byte, 2048)
-		process.unicast_recv(source, msg)
-	}
-}
-
-func main() {
-	pid, _ := strconv.Atoi(os.Args[1])
-
-	// Entry point, a new process is created and it reads
-	// the config file to learn about other processes.
-	process := Process{pid: pid}
-	process.read_config()
-	go process.recv_command()
-
-	port := strconv.Itoa(process.port)
-	ln, _ := net.Listen("tcp", process.ip+":"+port)
-	for {
 		//fmt.Printf("please input a command: send [Integer] [String] \n>> ")
 		// message, destination := process_command()
 		// go process.unicast_send(destination, []byte(message))
 		source, _ := ln.Accept()
 		msg := make([]byte, 2048)
 		go process.unicast_recv(source, msg)
+	}
+}
+
+func main() {
+	pid, _ := strconv.Atoi(os.Args[1])
+	// Entry point, a new process is created and it reads
+	// the config file to learn about other processes.
+	process := Process{pid: pid}
+	process.read_config()
+	go process.recv_commands()
+	go process.recv_messages()
+	for {
 	}
 }
