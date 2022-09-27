@@ -109,21 +109,21 @@ func (process *Process) unicast_send(destination string, message []byte) {
 	// Writes the message into the TCP channel.
 	conn.Write(message)
 	conn.Close()
-	fmt.Printf("Sent \"%s\" to process %d, system time is %v\n", message, pid, time.Now().Unix())
+	fmt.Printf("Sent " + string(message) + " to process %d, system time is %v\n", pid, time.Now())
 }
 
 func (process *Process) unicast_recv(source net.Conn, msg []byte) {
 	var pid int32
 	binary.Read(source, binary.BigEndian, &pid)
 	source.Read(msg)
-	fmt.Printf("Received \"%s\" from process %d, system time is %v\n>> ", msg, pid, time.Now())
+	fmt.Printf("Received " + string(msg) + " from process %d, system time is %v\n>> ", pid, time.Now())
 }
 
 func (process *Process) get_command() (string, string, error) {
 	// Reads the command from Stdin
 	command, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	// Trims the new line obtained when the user hits Enter.
-	command = strings.TrimSuffix(command, "\n")
+	command = strings.TrimSuffix(command, "\r\n")
 	// If the command is 'q' exits the program.
 	if command == "q" {
 		fmt.Println("Closing TCP server...")
