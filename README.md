@@ -34,6 +34,8 @@ Please see the earlier section under ``Overview of mp1.go``. You will see ``type
 Three functions, ``get_command()``, ``recv_commands()``, and ``unicast_send()`` work together to send messages to another process. The first parses the commands from the command-line, returning the ``destination`` and ``message`` parameters of the ``send`` command. Then, the second function receives those parameters, and calls upon the third function to finally perform the command. In other words, ``unicast_send()`` dials the destination process and sends the user-generated message. This function is called by ``recv_commands()``, which is a goroutine that continuously awaits user-input. This logs and outputs the event with a timestamp.
 ### Receiving Messages
 Two functions, ``recv_messages()`` and ``unicast_recv()``, work together to receive messages from another process. The first function is constantly listening on its given port. It calls upon ``unicast_recv()`` to read the detected message and source, logging and outputting the event with a timestamp.
+### Main() - Putting it All Together
+``config.txt`` is read, parsed, and processes mapped accordingly. Then, goroutines are used to send and receive messages until exited by user-input.
   
 ## How To Run
 1. Open a terminal. 
@@ -42,6 +44,7 @@ Two functions, ``recv_messages()`` and ``unicast_recv()``, work together to rece
 4. Input the following command: ``./mp1 [PID]``. PID should be a single integer corresponding to the desired process you wish to start (1 or 2).
 5. Open a second terminal and navigate to the project folder.
 6. Repeat step 4.
-7. In each terminal, input the following command: ``send [PID] [message]``. The message can be any string.  
+7. In each terminal, input the following command: ``send [PID] [message]``. The message can be any string. 
+8. Type ``q`` to quit the process. Must do this for each terminal in which a process is running. 
   
 *Note: The processes will display send and receive messages with time stamps in their respective terminals.*
