@@ -20,9 +20,10 @@ This file is responsible for reading the contents of ``config.txt``. With comman
 #### Process Type and Reading config.txt
 A key component of this file is the creation of the Process type. Its fields consist of IP address, port number, minimum delay, maximum delay, and PID. It also maps remote process IDs to IPs and ports. After the program reads and parses ``config.txt``, the values are stored according to the Process type.
 #### Sending Messages
-Test
+Utilizing goroutines, the program handles sending messages by implementing ``unicast_send`` functionality. A specific process will take a command in the terminal. This command, ``send`` will take ``destination`` and ``message`` parameters, and will send a message to the destination process, with a system message outputting the time stamp.
+  
 #### Receiving Messages
-Test
+Utilizing goroutines, the program handles receiving messages by implementing ``unicast_receive`` functionality. Each process will constantly be waiting for another process to dial it. When that happens, it will send a system message outputting the message received with a time stamp.
   
 ## Code Flow
   
