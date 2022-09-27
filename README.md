@@ -27,7 +27,7 @@ This file is responsible for reading the contents of `config.txt`. With command-
 
 #### Process Type and Reading config.txt
 
-A key component of this file is the creation of the program state. The program has one object of type `Process` that contains all state information. Its fields consist of IP address, port number, minimum delay, maximum delay, and PID. It also maps remote process IDs to IPs and ports. After the program reads and parses `config.txt`, the values are stored according to the Process type.
+A key component of this file is the creation of the program state. The program has one object of type `Process` that contains all state information. The object maps remote process IDs to IPs and ports. After the program reads and parses `config.txt`, the values are stored according to the Process type.
 
 ```go
 type Process struct {
