@@ -116,7 +116,7 @@ func (process *Process) unicast_recv(source net.Conn, msg []byte) {
 	var pid int32
 	binary.Read(source, binary.BigEndian, &pid)
 	source.Read(msg)
-	fmt.Printf("Received " + string(msg) + " from process %d, system time is %v\n>> ", pid, time.Now())
+	fmt.Printf("Received " + from_c_str(msg) + " from process %d, system time is %v\n>> ", pid, time.Now())
 }
 
 func (process *Process) get_command() (string, string, error) {
@@ -153,6 +153,18 @@ func (process *Process) recv_commands() {
 		// the receiving process.
 		process.unicast_send(destination, []byte(message))
 	}
+}
+
+func from_c_str(bytes []byte) string {
+	null := 0
+	for i, b := range bytes {
+		if b == 0 {
+			null = i
+			break
+		}
+	}
+
+	return string(bytes[0:null])
 }
 
 func (process *Process) recv_messages() {
