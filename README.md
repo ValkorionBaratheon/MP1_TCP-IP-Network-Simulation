@@ -7,5 +7,5 @@
 4. Input the following command: ``./mp1 [PID]``. PID (process ID) should be a single integer corresponding to the desired process you wish to start (1 or 2).
 5. Open a second terminal and navigate to the project folder.
 6. Repeat step 4.
-7. In each terminal, input the following command: ``send [PID] [message]``. The message can be any string.
+7. In each terminal, input the following command: ``send [PID] [message]``. The message can be any string.  
 *Note: The processes will display send and receive messages with time stamps in their respective terminals.*
