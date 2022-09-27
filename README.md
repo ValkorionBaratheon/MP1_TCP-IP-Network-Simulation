@@ -1,7 +1,7 @@
 # Machine Problem 1: TCP/IP Network Simulation
 This is Machine Problem 1, which simulates delays in a TCP/IP server-client relationship.
    
-This program consists the following sections:
+This program documentation consists of the following sections:
 1. Program Design
 2. Code Flow
 3. How to Run
